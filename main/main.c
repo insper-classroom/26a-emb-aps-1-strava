@@ -3,6 +3,19 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 
+#include "tft_lcd_ili9341/gfx/gfx_ili9341.h"
+#include "tft_lcd_ili9341/ili9341/ili9341.h"
+#include "tft_lcd_ili9341/touch_resistive/touch_resistive.h"
+#include "image_bitmap.h"
+
+// Propriedades do LCD
+#define SCREEN_ROTATION 1           
+const int width = 320;             
+const int height = 240;     
+
+// Posição da imagem na tela
+const int  rotImgPosX = (width - 32) / 2;
+const int  rotImgPosY = (height - 24) / 2;
 
 const int BTNS[] = {17, 14, 26, 16}; // 0:Red, 1:Blue, 2:Green, 3:Yellow
 const int LEDS[] = {15, 20, 13, 18}; 
@@ -14,6 +27,42 @@ int indice_jogador = 0;
 bool jogo_iniciado = false;
 
 volatile int botao_clicado = -1;
+
+int direcao = 1; 
+
+int f_btn = 0;
+
+void ledButtonCallback(GFX_Button *btn) {
+    f_btn = 1;
+}
+
+
+void drawImagem(int estado) {
+    gfx_fillRect(rotImgPosX, rotImgPosY, 32, 24, 0x0000);
+    if (direcao == 1){ //horario
+        if (estado == 0)
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_1, 24, 32, 0xFFFF); //1 > 24,32
+    else if(estado == 1)
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_2, 32, 24, 0xFFFF); //2 > 32,24
+    else if (estado == 2)
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_3, 24, 32, 0xFFFF); //3 > 24,32
+    else if (estado == 3)
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_4, 32, 24, 0xFFFF); //4 > 32,24
+        
+    }
+    else if (direcao == -1){ //æntihorario
+        if (estado == 0)
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_4, 32, 24, 0xFFFF); //1 > 24,32
+    else if(estado == 1)
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_3, 24, 32, 0xFFFF); //2 > 32,24
+    else if (estado == 2)
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_2, 32, 24, 0xFFFF); //3 > 24,32
+    else if (estado == 3)
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_1, 24, 32, 0xFFFF); //4 > 32,24
+    }
+    
+    
+}
 
 void apaga_leds() {
     for(int i=0; i<4; i++) gpio_put(LEDS[i], 0);
@@ -55,11 +104,44 @@ void iniciar_jogo() {
     jogo_iniciado = true;
     
     sequencia[tamanho_seq++] = rand() % 4;
+    printf("Sequencia: %d\n", sequencia);
     mostra_sequencia();
 }
 
 int main() {
     stdio_init_all();
+
+    LCD_initDisplay();
+    LCD_setRotation(SCREEN_ROTATION);  
+
+    //### TOUCH
+    configure_touch();                  
+    //### GFX
+    gfx_init();                         
+    gfx_clear();                        
+
+    gfx_setTextSize(2);                                 
+    gfx_setTextColor(0x07E0);                          
+
+    gfx_drawText(
+        width/6,// Posição horizontal do texto
+        10, // Posição vertical do texto
+        "EITA" // Texto a ser exibido
+    );
+ 
+
+    // Criação do botão para o LED, invisivel
+    GFX_Button ledButton = {            
+        .x = rotImgPosX,// Posição horizontal do botão (mesma da imagem do LED)
+        .y = rotImgPosY,    // Posição vertical do botão (mesma da imagem do LED)
+        .w = 32,  // Largura do botão (mesma da largura da imagem do LED)
+        .h = 32, // Altura do botão (mesma da altura da imagem do LED)
+        .callback = ledButtonCallback   // Função callback que será chamada quando o botão for pressionado
+    };
+
+    int img =0;
+    gfx_registerButton(&ledButton);   
+    drawImagem(img);
 
     for(int i=0; i<4; i++) {
         gpio_init(LEDS[i]);
@@ -73,6 +155,20 @@ int main() {
     }
 
     while (true) {
+        int touchRawX, touchRawY; 
+        int screenTouchX, screenTouchY  = 0; 
+        int touchDetected = readPoint(&touchRawX, &touchRawY);
+
+        if (touchDetected)  {                                                       
+            gfx_touchTransform(SCREEN_ROTATION,                  
+                               touchRawX, touchRawY,            
+                               &screenTouchX, &screenTouchY);
+
+                                                                     
+            gfx_updateButtons(screenTouchX, screenTouchY, touchDetected);   
+                                                                                                        
+        }
+
         if (botao_clicado != -1) {
             int cor = botao_clicado;
             
