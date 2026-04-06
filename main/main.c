@@ -14,6 +14,11 @@
 const int width = 320;             
 const int height = 240;     
 
+#define BG_COLOR 0x0000
+#define TEXT_COLOR 0x07E0
+#define ALERT_COLOR 0xF800
+#define ANIM_FRAME_MS 220
+
 // Posição da imagem na tela
 const int  rotImgPosX = (width - 32) / 2;
 const int  rotImgPosY = (height - 24) / 2;
@@ -30,35 +35,90 @@ int indice_jogador = 0;
 bool jogo_iniciado = false;
 
 volatile int botao_clicado = -1;
+int anim_frame = 1;
+uint32_t next_anim_update_ms = 0;
 
-int direcao = 1; 
+void drawImagem(int estado);
+void update_game_animation_if_needed(void);
+void sleep_with_animation(int total_ms);
+
+const int text_height = 16; // fonte 6x8 com tamanho 2
+const int msgPosY = rotImgPosY - 60;
+const int levelPosY = rotImgPosY + 50;
+
+void draw_centered_text_with_clear(const char *txt, int y, uint16_t color, int clear_h) {
+    int text_w = gfx_getTextWidth(txt);
+    int x = (width - text_w) / 2;
+    gfx_fillRect(0, y, width, clear_h, BG_COLOR);
+    gfx_setTextColor(color);
+    gfx_drawText(x, y, txt);
+}
+
+void draw_start_screen() {
+    gfx_clear();
+    draw_centered_text_with_clear("Aperte o botao vermelho", msgPosY, TEXT_COLOR, text_height);
+    draw_centered_text_with_clear("para iniciar", msgPosY + text_height + 4, TEXT_COLOR, text_height);
+    drawImagem(0);
+}
+
+void draw_level_text() {
+    char level_text[20];
+    snprintf(level_text, sizeof(level_text), "Nivel: %d", tamanho_seq);
+    draw_centered_text_with_clear(level_text, levelPosY, TEXT_COLOR, text_height);
+}
+
+void show_game_over_screen() {
+    gfx_clear();
+    draw_centered_text_with_clear("GAME OVER", msgPosY, ALERT_COLOR, text_height);
+    draw_centered_text_with_clear("Pontuacao: ", msgPosY + text_height + 4, TEXT_COLOR, text_height);
+
+    char score_text[20];
+    snprintf(score_text, sizeof(score_text), "%d", tamanho_seq - 1);
+    draw_centered_text_with_clear(score_text, msgPosY + (text_height + 4) * 2, TEXT_COLOR, text_height);
+
+    sleep_ms(1800);
+    draw_start_screen();
+}
+ 
 
 
 void drawImagem(int estado) {
     gfx_fillRect(startImgPosX, startImgPosY, 48, 48, 0x0000);
-    if (direcao == 1){ //horario
-        if (estado == 0)
+
+    if (estado == 0)
         gfx_drawBitmap(startImgPosX, startImgPosY, start, 48, 48, 0xFFFF); // start > 48,48
-    else if(estado == 1)
+    else if (estado == 1)
+        gfx_drawBitmap(rotImgPosX + 4, rotImgPosY - 4, horario_1, 24, 32, 0xFFFF); //1 > 24,32
+    else if (estado == 2)
         gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_2, 32, 24, 0xFFFF); //2 > 32,24
-    else if (estado == 2)
+    else if (estado == 3)
         gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_3, 24, 32, 0xFFFF); //3 > 24,32
-    else if (estado == 3)
+    else if (estado == 4)
         gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_4, 32, 24, 0xFFFF); //4 > 32,24
-        
+}
+
+void update_game_animation_if_needed(void) {
+    if (!jogo_iniciado) return;
+
+    uint32_t now_ms = to_ms_since_boot(get_absolute_time());
+    if (now_ms < next_anim_update_ms) return;
+
+    drawImagem(anim_frame);
+    anim_frame++;
+    if (anim_frame > 4) anim_frame = 1;
+    next_anim_update_ms = now_ms + ANIM_FRAME_MS;
+}
+
+void sleep_with_animation(int total_ms) {
+    const int step_ms = 20;
+    int elapsed = 0;
+
+    while (elapsed < total_ms) {
+        int chunk = (total_ms - elapsed > step_ms) ? step_ms : (total_ms - elapsed);
+        sleep_ms(chunk);
+        elapsed += chunk;
+        update_game_animation_if_needed();
     }
-    else if (direcao == -1){ //æntihorario
-        if (estado == 0)
-        gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_4, 32, 24, 0xFFFF); //1 > 24,32
-    else if(estado == 1)
-        gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_3, 24, 32, 0xFFFF); //2 > 32,24
-    else if (estado == 2)
-        gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_2, 32, 24, 0xFFFF); //3 > 24,32
-    else if (estado == 3)
-        gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_1, 24, 32, 0xFFFF); //4 > 32,24
-    }
-    
-    
 }
 
 void apaga_leds() {
@@ -68,18 +128,18 @@ void apaga_leds() {
 // Função para acender o LED com tempo ajustável
 void acende_feedback(int idx, int tempo_ms) {
     gpio_put(LEDS[idx], 1);
-    sleep_ms(tempo_ms);
+    sleep_with_animation(tempo_ms);
     gpio_put(LEDS[idx], 0);
 }
 
 void mostra_sequencia() {
-    sleep_ms(500); // Pequena pausa antes de começar a mostrar
+    sleep_with_animation(500); // Pequena pausa antes de começar a mostrar
     for (int i = 0; i < tamanho_seq; i++) {
         // Atualiza a imagem na tela pra cada cor
         
         // Acende o LED correspondente
         acende_feedback(sequencia[i], 600); // 600ms = LED mais visível
-        sleep_ms(200); // Intervalo entre cores da sequência
+        sleep_with_animation(200); // Intervalo entre cores da sequência
     }
     // Volta pra posição inicial apos mostrar sequencia
     
@@ -104,9 +164,16 @@ void iniciar_jogo() {
     tamanho_seq = 0;
     indice_jogador = 0;
     jogo_iniciado = true;
+
+    // Remove elementos da tela inicial (texto e imagem de play).
+    gfx_clear();
+
+    anim_frame = 1;
+    next_anim_update_ms = to_ms_since_boot(get_absolute_time());
+    drawImagem(anim_frame);
     
     sequencia[tamanho_seq++] = rand() % 4;
-    printf("Sequencia: %d\n", sequencia);
+    draw_level_text();
     mostra_sequencia();
 }
 
@@ -120,21 +187,9 @@ int main() {
     gfx_init();                         
     gfx_clear();                        
 
-    gfx_setTextSize(2);                                 
-    gfx_setTextColor(0x07E0);                          
-
-        const char *start_text = "Aperte o botao vermelho";
-        const int startTextPosX = (width - gfx_getTextWidth(start_text)) / 2;
-        const int startTextPosY = rotImgPosY - 40;
-    
-        gfx_drawText(
-            startTextPosX, // Posição horizontal do texto
-            startTextPosY, // Posição vertical do texto
-            start_text // Texto a ser exibido
-    );
-    int img =0;
-    
-    drawImagem(img);
+    gfx_setTextSize(2);
+    gfx_setTextColor(TEXT_COLOR);
+    draw_start_screen();
 
     for(int i=0; i<4; i++) {
         gpio_init(LEDS[i]);
@@ -148,13 +203,15 @@ int main() {
     }
 
     while (true) {
+        update_game_animation_if_needed();
+
         if (botao_clicado != -1) {
             int cor = botao_clicado;
             
             // Lógica de início (Botão Vermelho = Índice 0)
             if (!jogo_iniciado) {
                 if (cor == 0) {
-                    acende_feedback(0, 300);
+                   
                     iniciar_jogo();
                 }
                 botao_clicado = -1; 
@@ -174,9 +231,10 @@ int main() {
                         indice_jogador = 0;
                         if(tamanho_seq < MAX_SEQ) {
                             sequencia[tamanho_seq++] = rand() % 4;
-                            sleep_ms(400);
+                            draw_level_text();
+                            sleep_with_animation(400);
                             
-                            sleep_ms(200);
+                            sleep_with_animation(200);
                             mostra_sequencia();
                         }
                     }
@@ -191,7 +249,7 @@ int main() {
                         sleep_ms(150);
                        
                     }
-                    // Volta pra tela inicial
+                    show_game_over_screen();
                     
                     botao_clicado = -1;
                 }
