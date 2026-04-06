@@ -5,9 +5,21 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 
+// Adicionado: Biblioteca de clocks para o áudio funcionar na velocidade certa
+#include "hardware/clocks.h" 
+
 #include "tft_lcd_ili9341/gfx/gfx_ili9341.h"
 #include "tft_lcd_ili9341/ili9341/ili9341.h"
 #include "image_bitmap.h"
+
+// Adicionado: Módulo de áudio e os vetores de som
+#include "audio.h"
+#include "vermelho.h"
+#include "azul.h"
+#include "verde.h"
+#include "amarelo.h"
+#include "start.h"
+#include "stop.h"
 
 // Propriedades do LCD
 #define SCREEN_ROTATION 1           
@@ -33,7 +45,6 @@ volatile int botao_clicado = -1;
 
 int direcao = 1; 
 
-
 void drawImagem(int estado) {
     gfx_fillRect(startImgPosX, startImgPosY, 48, 48, 0x0000);
     if (direcao == 1){ //horario
@@ -57,36 +68,38 @@ void drawImagem(int estado) {
     else if (estado == 3)
         gfx_drawBitmap(rotImgPosX, rotImgPosY, anti_horario_1, 24, 32, 0xFFFF); //4 > 32,24
     }
-    
-    
 }
 
 void apaga_leds() {
     for(int i=0; i<4; i++) gpio_put(LEDS[i], 0);
 }
 
-// Função para acender o LED com tempo ajustável
 void acende_feedback(int idx, int tempo_ms) {
+    // Adicionado: Toca o som da cor específica antes de acender o LED
+    if (idx == 0) tocar_som(VERMELHO_WAV_DATA, VERMELHO_WAV_LENGTH);
+    else if (idx == 1) tocar_som(AZUL_WAV_DATA, AZUL_WAV_LENGTH);
+    else if (idx == 2) tocar_som(VERDE_WAV_DATA, VERDE_WAV_LENGTH);
+    else if (idx == 3) tocar_som(AMARELO_WAV_DATA, AMARELO_WAV_LENGTH);
+
     gpio_put(LEDS[idx], 1);
     sleep_ms(tempo_ms);
     gpio_put(LEDS[idx], 0);
+
+    // Adicionado: Para o som exatamente quando o LED apaga
+    parar_som(); 
 }
 
 void mostra_sequencia() {
-    sleep_ms(500); // Pequena pausa antes de começar a mostrar
+    sleep_ms(500); 
     for (int i = 0; i < tamanho_seq; i++) {
-        // Atualiza a imagem na tela pra cada cor
-        
-        // Acende o LED correspondente
-        acende_feedback(sequencia[i], 600); // 600ms = LED mais visível
-        sleep_ms(200); // Intervalo entre cores da sequência
+        drawImagem(sequencia[i]); 
+        acende_feedback(sequencia[i], 600); 
+        sleep_ms(200); 
     }
-    // Volta pra posição inicial apos mostrar sequencia
-    
+    drawImagem(0);
 }
 
 void btn_callback(uint gpio, uint32_t event_mask) {
-    // Debounce simples: só aceita novo clique se o anterior foi processado
     if (botao_clicado != -1) return; 
 
     for(int i=0; i<4; i++) {
@@ -99,41 +112,54 @@ void btn_callback(uint gpio, uint32_t event_mask) {
 
 void iniciar_jogo() {
     printf("Iniciando...\n");
-    // Usa o tempo de boot como semente para o aleatório
+    
+    // Adicionado: Toca o som de início do jogo
+    tocar_som(START_WAV_DATA, START_WAV_LENGTH);
+    
     srand(to_ms_since_boot(get_absolute_time()));
     tamanho_seq = 0;
     indice_jogador = 0;
     jogo_iniciado = true;
     
-    sequencia[tamanho_seq++] = rand() % 4;
-    printf("Sequencia: %d\n", sequencia);
+    sequencia[tamanho_seq] = rand() % 4; 
+    printf("Sequencia: %d\n", sequencia[tamanho_seq]);
+    tamanho_seq++;
+    
+    // Adicionado: Pausa para a música de Start terminar antes de mostrar as cores
+    sleep_ms(1500); 
+    
     mostra_sequencia();
 }
 
 int main() {
+    // Adicionado: Acelera o clock da placa para o PWM de áudio não ficar distorcido
+    set_sys_clock_khz(176000, true);
+    
     stdio_init_all();
+
+    // Adicionado: Inicializa os pinos e interrupções do áudio
+    audio_init();
 
     LCD_initDisplay();
     LCD_setRotation(SCREEN_ROTATION);  
 
-    //### GFX
     gfx_init();                         
     gfx_clear();                        
 
     gfx_setTextSize(2);                                 
     gfx_setTextColor(0x07E0);                          
 
-        const char *start_text = "Aperte o botao vermelho";
-        const int startTextPosX = (width - gfx_getTextWidth(start_text)) / 2;
-        const int startTextPosY = rotImgPosY - 40;
+    const char *start_text = "Aperte o botao vermelho";
+    const int startTextPosX = (width - gfx_getTextWidth(start_text)) / 2;
+    const int startTextPosY = rotImgPosY - 40;
     
-        gfx_drawText(
-            startTextPosX, // Posição horizontal do texto
-            startTextPosY, // Posição vertical do texto
-            start_text // Texto a ser exibido
+    gfx_drawText(
+        startTextPosX, 
+        startTextPosY, 
+        start_text 
     );
-    int img =0;
     
+    int img = 0;
     drawImagem(img);
 
     for(int i=0; i<4; i++) {
@@ -151,7 +177,6 @@ int main() {
         if (botao_clicado != -1) {
             int cor = botao_clicado;
             
-            // Lógica de início (Botão Vermelho = Índice 0)
             if (!jogo_iniciado) {
                 if (cor == 0) {
                     acende_feedback(0, 300);
@@ -160,39 +185,36 @@ int main() {
                 botao_clicado = -1; 
             } 
             else {
-                // Jogador apertou uma cor durante o jogo
-                // Mostra a cor na tela
-                
-                acende_feedback(cor, 400); // Feedback rápido do clique
+                acende_feedback(cor, 400); 
 
                 if (cor == sequencia[indice_jogador]) {
                     indice_jogador++;
-                    botao_clicado = -1; // Libera para o próximo clique
+                    botao_clicado = -1; 
 
                     if (indice_jogador == tamanho_seq) {
                         printf("Proximo nivel!\n");
                         indice_jogador = 0;
                         if(tamanho_seq < MAX_SEQ) {
                             sequencia[tamanho_seq++] = rand() % 4;
-                            sleep_ms(400);
-                            
-                            sleep_ms(200);
+                            sleep_ms(600); 
                             mostra_sequencia();
                         }
                     }
                 } else {
                     printf("Erro!\n");
                     jogo_iniciado = false;
-                    // Pisca tudo para avisar erro
+                    
+                    // Adicionado: Toca o som de Game Over (Stop)
+                    tocar_som(STOP_WAV_DATA, STOP_WAV_LENGTH);
+                    
                     for(int i=0; i<3; i++) {
                         for(int l=0; l<4; l++) gpio_put(LEDS[l], 1);
                         sleep_ms(150);
                         apaga_leds();
                         sleep_ms(150);
-                       
                     }
-                    // Volta pra tela inicial
                     
+                    drawImagem(0);
                     botao_clicado = -1;
                 }
             }
