@@ -1,9 +1,14 @@
 /*    File arquivo_vermelho.wav
  *    Sample rate 11000 Hz
  */
-#define WAV_DATA_LENGTH 24551 
+#ifndef VERMELHO_H
+#define VERMELHO_H
 
-uint8_t WAV_DATA[] = {
+#include <stdint.h>
+
+#define VERMELHO_WAV_LENGTH 24551 
+
+static const uint8_t VERMELHO_WAV_DATA[] = {
     129,129,129,129,129,129,129,129,129,129,129,129,129,129,129,129,
     129,129,129,129,129,129,129,129,129,129,129,129,129,129,129,129,
     129,129,129,129,129,129,129,129,129,129,129,129,129,129,129,129,
@@ -1540,3 +1545,5 @@ uint8_t WAV_DATA[] = {
     129,129,129,129,129,129,129,129,129,129,129,129,129,129,129,129,
     129,129,129,129,129,129,129,129    
 };
+
+#endif

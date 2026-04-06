@@ -1,9 +1,8 @@
 #include "audio.h"
+#include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/pwm.h"
 #include <stddef.h>
-
-#define AUDIO_PIN 26;
 
 volatile const uint8_t *audio_atual = NULL;
 
@@ -20,12 +19,9 @@ void pwm_interrupt_handler(void){
         if (pos < tamanho_audio){
             pwm_set_gpio_level(AUDIO_PIN,audio_atual[pos]);
             wav_position++;
+        } else {
+            parar_som();
         }
-    } else {
-        audio_atual = NULL;
-        wav_position = 0;
-        pwm_set_gpio_level(AUDIO_PIN,0);
-
     }
 }
 
@@ -53,4 +49,11 @@ void tocar_som(const uint8_t *novo_audio, int tamanho){
     audio_atual = novo_audio;
     tamanho_audio = tamanho;
     wav_position = 0;
+}
+
+void parar_som(void) {
+    audio_atual = NULL;
+    tamanho_audio = 0;
+    wav_position = 0;
+    pwm_set_gpio_level(AUDIO_PIN, 0);
 }

@@ -1,9 +1,14 @@
 /*    File arquivo_amarelo.wav
  *    Sample rate 11000 Hz
  */
-#define WAV_DATA_LENGTH 60983 
+#ifndef AMARELO_H
+#define AMARELO_H
 
-uint8_t WAV_DATA[] = {
+#include <stdint.h>
+
+#define AMARELO_WAV_LENGTH 60983 
+
+static const uint8_t AMARELO_WAV_DATA[] = {
     128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
     128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
     128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
@@ -3817,3 +3822,5 @@ uint8_t WAV_DATA[] = {
     128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
     128,128,128,128,128,128,128,128    
 };
+
+#endif

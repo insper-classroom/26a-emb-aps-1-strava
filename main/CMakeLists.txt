@@ -1,6 +1,7 @@
 # Adicione todos os arquivos .c da biblioteca do LCD aqui
 add_executable(pico_emb 
     main.c
+    audio.c
     tft_lcd_ili9341/ili9341/ili9341.c
     tft_lcd_ili9341/gfx/gfx_ili9341.c
     tft_lcd_ili9341/touch_resistive/touch_resistive.c
@@ -22,6 +23,7 @@ target_link_libraries(pico_emb
     hardware_spi 
     hardware_gpio
     hardware_adc
+    hardware_pwm
 )
 
 # Habilita o printf via USB (Serial Monitor)
