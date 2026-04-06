@@ -54,3 +54,9 @@ void tocar_som(const uint8_t *novo_audio, int tamanho){
     tamanho_audio = tamanho;
     wav_position = 0;
 }
+
+void parar_som(void) {
+    audio_atual = NULL;
+    wav_position = 0;
+    pwm_set_gpio_level(AUDIO_PIN, 0);
+}
