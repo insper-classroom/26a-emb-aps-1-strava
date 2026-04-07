@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // GPIO26 ja e usado pelos botoes/touch; audio configurado no GPIO2.
-#define AUDIO_PIN 2
+#define AUDIO_PIN 14
 
 void audio_init(void);
 

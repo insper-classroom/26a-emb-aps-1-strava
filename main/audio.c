@@ -19,9 +19,12 @@ void pwm_interrupt_handler(void){
         if (pos < tamanho_audio){
             pwm_set_gpio_level(AUDIO_PIN,audio_atual[pos]);
             wav_position++;
-        } else {
-            parar_som();
         }
+    } else {
+        audio_atual = NULL;
+        wav_position = 0;
+        pwm_set_gpio_level(AUDIO_PIN,0);
+
     }
 }
 

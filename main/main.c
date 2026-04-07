@@ -37,8 +37,8 @@ const int  rotImgPosY = (height - 24) / 2;
 const int  startImgPosX = (width - 48) / 2;
 const int  startImgPosY = (height - 48) / 2;
 
-const int BTNS[] = {11, 27, 12, 26}; // 0:Red, 1:Blue, 2:Green, 3:Yellow
-const int LEDS[] = {21, 10, 9, 13}; 
+const int BTNS[] = {11, 3, 12, 4}; // 0:Red, 1:Blue, 2:Green, 3:Yellow
+const int LEDS[] = {10, 2, 13, 5}; 
 
 #define MAX_SEQ 100
 int sequencia[MAX_SEQ];
