@@ -17,7 +17,7 @@
 #include "verde.h"
 #include "amarelo.h"
 #include "start.h"
-#include "stop.h"
+#include "game_over.h"
 
 #define SCREEN_ROTATION 1           
 const int width = 320;             
@@ -266,7 +266,7 @@ int main() {
                     printf("Erro!\n");
                     state.jogo_iniciado = false;
                     
-                    tocar_som(STOP_WAV_DATA, STOP_WAV_LENGTH);
+                    tocar_som(GAME_OVER_WAV_DATA, GAME_OVER_WAV_LENGTH);
 
                     for(int i=0; i<3; i++) {
                         for(int l=0; l<4; l++) gpio_put(LEDS[l], 1);
