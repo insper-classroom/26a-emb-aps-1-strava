@@ -5,14 +5,12 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 
-// Biblioteca de clocks para o PWM do áudio não distorcer
 #include "hardware/clocks.h" 
 
 #include "tft_lcd_ili9341/gfx/gfx_ili9341.h"
 #include "tft_lcd_ili9341/ili9341/ili9341.h"
 #include "image_bitmap.h"
 
-// Módulo de áudio e os vetores de som
 #include "audio.h"
 #include "vermelho.h"
 #include "azul.h"
@@ -21,7 +19,6 @@
 #include "start.h"
 #include "stop.h"
 
-// Propriedades do LCD
 #define SCREEN_ROTATION 1           
 const int width = 320;             
 const int height = 240;     
@@ -31,13 +28,12 @@ const int height = 240;
 #define ALERT_COLOR 0xF800
 #define ANIM_FRAME_MS 220
 
-// Posição da imagem na tela
 const int  rotImgPosX = (width - 32) / 2;
 const int  rotImgPosY = (height - 24) / 2;
 const int  startImgPosX = (width - 48) / 2;
 const int  startImgPosY = (height - 48) / 2;
 
-const int BTNS[] = {11, 3, 12, 4}; // 0:Red, 1:Blue, 2:Green, 3:Yellow
+const int BTNS[] = {11, 3, 12, 4};
 const int LEDS[] = {10, 2, 13, 5}; 
 
 #define MAX_SEQ 100
@@ -54,7 +50,7 @@ void drawImagem(int estado);
 void update_game_animation_if_needed(void);
 void sleep_with_animation(int total_ms);
 
-const int text_height = 16; // fonte 6x8 com tamanho 2
+const int text_height = 16;
 const int msgPosY = rotImgPosY - 60;
 const int levelPosY = rotImgPosY + 50;
 
@@ -96,15 +92,15 @@ void drawImagem(int estado) {
     gfx_fillRect(startImgPosX, startImgPosY, 48, 48, 0x0000);
 
     if (estado == 0)
-        gfx_drawBitmap(startImgPosX, startImgPosY, start, 48, 48, 0xFFFF); // start > 48,48
+        gfx_drawBitmap(startImgPosX, startImgPosY, start, 48, 48, 0xFFFF);
     else if (estado == 1)
-        gfx_drawBitmap(rotImgPosX + 4, rotImgPosY - 4, horario_1, 24, 32, 0xFFFF); //1 > 24,32
+        gfx_drawBitmap(rotImgPosX + 4, rotImgPosY - 4, horario_1, 24, 32, 0xFFFF);
     else if (estado == 2)
-        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_2, 32, 24, 0xFFFF); //2 > 32,24
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_2, 32, 24, 0xFFFF);
     else if (estado == 3)
-        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_3, 24, 32, 0xFFFF); //3 > 24,32
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_3, 24, 32, 0xFFFF);
     else if (estado == 4)
-        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_4, 32, 24, 0xFFFF); //4 > 32,24
+        gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_4, 32, 24, 0xFFFF);
 }
 
 void update_game_animation_if_needed(void) {
@@ -135,33 +131,28 @@ void apaga_leds() {
     for(int i=0; i<4; i++) gpio_put(LEDS[i], 0);
 }
 
-// Função para acender o LED e tocar som com tempo ajustável
 void acende_feedback(int idx, int tempo_ms) {
-    // 1. Toca o som da cor específica antes de acender o LED
     if (idx == 0) tocar_som(VERMELHO_WAV_DATA, VERMELHO_WAV_LENGTH);
     else if (idx == 1) tocar_som(AZUL_WAV_DATA, AZUL_WAV_LENGTH);
     else if (idx == 2) tocar_som(VERDE_WAV_DATA, VERDE_WAV_LENGTH);
     else if (idx == 3) tocar_som(AMARELO_WAV_DATA, AMARELO_WAV_LENGTH);
 
-    // 2. Acende o LED (mantendo a animação rolando no fundo)
     gpio_put(LEDS[idx], 1);
     sleep_with_animation(tempo_ms);
     gpio_put(LEDS[idx], 0);
 
-    // 3. Para o som exatamente quando o LED apaga
     parar_som(); 
 }
 
 void mostra_sequencia() {
-    sleep_with_animation(500); // Pequena pausa antes de começar a mostrar
+    sleep_with_animation(500);
     for (int i = 0; i < tamanho_seq; i++) {
-        acende_feedback(sequencia[i], 600); // 600ms = LED mais visível
-        sleep_with_animation(200); // Intervalo entre cores da sequência
+        acende_feedback(sequencia[i], 600);
+        sleep_with_animation(200);
     }
 }
 
 void btn_callback(uint gpio, uint32_t event_mask) {
-    // Debounce simples: só aceita novo clique se o anterior foi processado
     if (botao_clicado != -1) return; 
 
     for(int i=0; i<4; i++) {
@@ -175,16 +166,13 @@ void btn_callback(uint gpio, uint32_t event_mask) {
 void iniciar_jogo() {
     printf("Iniciando...\n");
     
-    // Toca o som de início do jogo
     tocar_som(START_WAV_DATA, START_WAV_LENGTH);
 
-    // Usa o tempo de boot como semente para o aleatório
     srand(to_ms_since_boot(get_absolute_time()));
     tamanho_seq = 0;
     indice_jogador = 0;
     jogo_iniciado = true;
 
-    // Remove elementos da tela inicial
     gfx_clear();
 
     anim_frame = 1;
@@ -194,25 +182,21 @@ void iniciar_jogo() {
     sequencia[tamanho_seq++] = rand() % 4;
     draw_level_text();
 
-    // Pausa para a música de Start terminar de tocar (mantendo a animação do display ativa)
     sleep_with_animation(1500); 
 
     mostra_sequencia();
 }
 
 int main() {
-    // Acelera o clock da placa para o áudio processar certinho
     set_sys_clock_khz(176000, true);
 
     stdio_init_all();
     
-    // Inicializa o hardware de áudio
     audio_init();
 
     LCD_initDisplay();
     LCD_setRotation(SCREEN_ROTATION);  
 
-    //### GFX
     gfx_init();                                 
     gfx_clear();                                
 
@@ -237,7 +221,6 @@ int main() {
         if (botao_clicado != -1) {
             int cor = botao_clicado;
             
-            // Lógica de início (Botão Vermelho = Índice 0)
             if (!jogo_iniciado) {
                 if (cor == 0) {
                     iniciar_jogo();
@@ -245,12 +228,11 @@ int main() {
                 botao_clicado = -1; 
             } 
             else {
-                // Jogador apertou uma cor durante o jogo
-                acende_feedback(cor, 400); // Feedback rápido do clique
+                acende_feedback(cor, 400);
 
                 if (cor == sequencia[indice_jogador]) {
                     indice_jogador++;
-                    botao_clicado = -1; // Libera para o próximo clique
+                    botao_clicado = -1;
 
                     if (indice_jogador == tamanho_seq) {
                         printf("Proximo nivel!\n");
@@ -268,10 +250,8 @@ int main() {
                     printf("Erro!\n");
                     jogo_iniciado = false;
                     
-                    // Toca o som de Game Over (Stop)
                     tocar_som(STOP_WAV_DATA, STOP_WAV_LENGTH);
 
-                    // Pisca tudo para avisar erro
                     for(int i=0; i<3; i++) {
                         for(int l=0; l<4; l++) gpio_put(LEDS[l], 1);
                         sleep_ms(150);
