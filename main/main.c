@@ -37,18 +37,26 @@ const int BTNS[] = {11, 3, 12, 4};
 const int LEDS[] = {10, 2, 13, 5}; 
 
 #define MAX_SEQ 100
-int sequencia[MAX_SEQ];
-int tamanho_seq = 0;
-int indice_jogador = 0;
-bool jogo_iniciado = false;
+
+typedef struct {
+    int sequencia[MAX_SEQ];
+    int tamanho_seq;
+    int indice_jogador;
+    bool jogo_iniciado;
+    int anim_frame;
+    uint32_t next_anim_update_ms;
+} GameState;
 
 volatile int botao_clicado = -1;
-int anim_frame = 1;
-uint32_t next_anim_update_ms = 0;
 
 void drawImagem(int estado);
-void update_game_animation_if_needed(void);
-void sleep_with_animation(int total_ms);
+void draw_level_text(const GameState *state);
+void show_game_over_screen(const GameState *state);
+void update_game_animation_if_needed(GameState *state);
+void sleep_with_animation(GameState *state, int total_ms);
+void acende_feedback(GameState *state, int idx, int tempo_ms);
+void mostra_sequencia(GameState *state);
+void iniciar_jogo(GameState *state);
 
 const int text_height = 16;
 const int msgPosY = rotImgPosY - 60;
@@ -69,19 +77,19 @@ void draw_start_screen() {
     drawImagem(0);
 }
 
-void draw_level_text() {
+void draw_level_text(const GameState *state) {
     char level_text[20];
-    snprintf(level_text, sizeof(level_text), "Nivel: %d", tamanho_seq);
+    snprintf(level_text, sizeof(level_text), "Nivel: %d", state->tamanho_seq);
     draw_centered_text_with_clear(level_text, levelPosY, TEXT_COLOR, text_height);
 }
 
-void show_game_over_screen() {
+void show_game_over_screen(const GameState *state) {
     gfx_clear();
     draw_centered_text_with_clear("GAME OVER", msgPosY, ALERT_COLOR, text_height);
     draw_centered_text_with_clear("Pontuacao: ", msgPosY + text_height + 4, TEXT_COLOR, text_height);
 
     char score_text[20];
-    snprintf(score_text, sizeof(score_text), "%d", tamanho_seq - 1);
+    snprintf(score_text, sizeof(score_text), "%d", state->tamanho_seq - 1);
     draw_centered_text_with_clear(score_text, msgPosY + (text_height + 4) * 2, TEXT_COLOR, text_height);
 
     sleep_ms(1800);
@@ -103,19 +111,19 @@ void drawImagem(int estado) {
         gfx_drawBitmap(rotImgPosX, rotImgPosY, horario_4, 32, 24, 0xFFFF);
 }
 
-void update_game_animation_if_needed(void) {
-    if (!jogo_iniciado) return;
+void update_game_animation_if_needed(GameState *state) {
+    if (!state->jogo_iniciado) return;
 
     uint32_t now_ms = to_ms_since_boot(get_absolute_time());
-    if (now_ms < next_anim_update_ms) return;
+    if (now_ms < state->next_anim_update_ms) return;
 
-    drawImagem(anim_frame);
-    anim_frame++;
-    if (anim_frame > 4) anim_frame = 1;
-    next_anim_update_ms = now_ms + ANIM_FRAME_MS;
+    drawImagem(state->anim_frame);
+    state->anim_frame++;
+    if (state->anim_frame > 4) state->anim_frame = 1;
+    state->next_anim_update_ms = now_ms + ANIM_FRAME_MS;
 }
 
-void sleep_with_animation(int total_ms) {
+void sleep_with_animation(GameState *state, int total_ms) {
     const int step_ms = 20;
     int elapsed = 0;
 
@@ -123,7 +131,7 @@ void sleep_with_animation(int total_ms) {
         int chunk = (total_ms - elapsed > step_ms) ? step_ms : (total_ms - elapsed);
         sleep_ms(chunk);
         elapsed += chunk;
-        update_game_animation_if_needed();
+        update_game_animation_if_needed(state);
     }
 }
 
@@ -131,63 +139,71 @@ void apaga_leds() {
     for(int i=0; i<4; i++) gpio_put(LEDS[i], 0);
 }
 
-void acende_feedback(int idx, int tempo_ms) {
+void acende_feedback(GameState *state, int idx, int tempo_ms) {
     if (idx == 0) tocar_som(VERMELHO_WAV_DATA, VERMELHO_WAV_LENGTH);
     else if (idx == 1) tocar_som(AZUL_WAV_DATA, AZUL_WAV_LENGTH);
     else if (idx == 2) tocar_som(VERDE_WAV_DATA, VERDE_WAV_LENGTH);
     else if (idx == 3) tocar_som(AMARELO_WAV_DATA, AMARELO_WAV_LENGTH);
 
     gpio_put(LEDS[idx], 1);
-    sleep_with_animation(tempo_ms);
+    sleep_with_animation(state, tempo_ms);
     gpio_put(LEDS[idx], 0);
 
     parar_som(); 
 }
 
-void mostra_sequencia() {
-    sleep_with_animation(500);
-    for (int i = 0; i < tamanho_seq; i++) {
-        acende_feedback(sequencia[i], 600);
-        sleep_with_animation(200);
+void mostra_sequencia(GameState *state) {
+    sleep_with_animation(state, 500);
+    for (int i = 0; i < state->tamanho_seq; i++) {
+        acende_feedback(state, state->sequencia[i], 600);
+        sleep_with_animation(state, 200);
     }
 }
 
 void btn_callback(uint gpio, uint32_t event_mask) {
+    (void)event_mask;
+
     if (botao_clicado != -1) return; 
 
-    for(int i=0; i<4; i++) {
-        if(gpio == BTNS[i]) {
-            botao_clicado = i;
-            break;
-        }
-    }
+    if (gpio == BTNS[0]) botao_clicado = 0;
+    else if (gpio == BTNS[1]) botao_clicado = 1;
+    else if (gpio == BTNS[2]) botao_clicado = 2;
+    else if (gpio == BTNS[3]) botao_clicado = 3;
 }
 
-void iniciar_jogo() {
+void iniciar_jogo(GameState *state) {
     printf("Iniciando...\n");
     
     tocar_som(START_WAV_DATA, START_WAV_LENGTH);
 
     srand(to_ms_since_boot(get_absolute_time()));
-    tamanho_seq = 0;
-    indice_jogador = 0;
-    jogo_iniciado = true;
+    state->tamanho_seq = 0;
+    state->indice_jogador = 0;
+    state->jogo_iniciado = true;
 
     gfx_clear();
 
-    anim_frame = 1;
-    next_anim_update_ms = to_ms_since_boot(get_absolute_time());
-    drawImagem(anim_frame);
+    state->anim_frame = 1;
+    state->next_anim_update_ms = to_ms_since_boot(get_absolute_time());
+    drawImagem(state->anim_frame);
     
-    sequencia[tamanho_seq++] = rand() % 4;
-    draw_level_text();
+    state->sequencia[state->tamanho_seq++] = rand() % 4;
+    draw_level_text(state);
 
-    sleep_with_animation(1500); 
+    sleep_with_animation(state, 1500); 
 
-    mostra_sequencia();
+    mostra_sequencia(state);
 }
 
 int main() {
+    GameState state = {
+        .tamanho_seq = 0,
+        .indice_jogador = 0,
+        .jogo_iniciado = false,
+        .anim_frame = 1,
+        .next_anim_update_ms = 0,
+    };
+
     set_sys_clock_khz(176000, true);
 
     stdio_init_all();
@@ -216,39 +232,39 @@ int main() {
     }
 
     while (true) {
-        update_game_animation_if_needed();
+        update_game_animation_if_needed(&state);
 
         if (botao_clicado != -1) {
             int cor = botao_clicado;
             
-            if (!jogo_iniciado) {
+            if (!state.jogo_iniciado) {
                 if (cor == 0) {
-                    iniciar_jogo();
+                    iniciar_jogo(&state);
                 }
                 botao_clicado = -1; 
             } 
             else {
-                acende_feedback(cor, 400);
+                acende_feedback(&state, cor, 400);
 
-                if (cor == sequencia[indice_jogador]) {
-                    indice_jogador++;
+                if (cor == state.sequencia[state.indice_jogador]) {
+                    state.indice_jogador++;
                     botao_clicado = -1;
 
-                    if (indice_jogador == tamanho_seq) {
+                    if (state.indice_jogador == state.tamanho_seq) {
                         printf("Proximo nivel!\n");
-                        indice_jogador = 0;
-                        if(tamanho_seq < MAX_SEQ) {
-                            sequencia[tamanho_seq++] = rand() % 4;
-                            draw_level_text();
-                            sleep_with_animation(400);
+                        state.indice_jogador = 0;
+                        if(state.tamanho_seq < MAX_SEQ) {
+                            state.sequencia[state.tamanho_seq++] = rand() % 4;
+                            draw_level_text(&state);
+                            sleep_with_animation(&state, 400);
                             
-                            sleep_with_animation(200);
-                            mostra_sequencia();
+                            sleep_with_animation(&state, 200);
+                            mostra_sequencia(&state);
                         }
                     }
                 } else {
                     printf("Erro!\n");
-                    jogo_iniciado = false;
+                    state.jogo_iniciado = false;
                     
                     tocar_som(STOP_WAV_DATA, STOP_WAV_LENGTH);
 
@@ -258,7 +274,7 @@ int main() {
                         apaga_leds();
                         sleep_ms(150);
                     }
-                    show_game_over_screen();
+                    show_game_over_screen(&state);
                     
                     botao_clicado = -1;
                 }
