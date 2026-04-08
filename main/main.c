@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
+#include "hardware/timer.h"
 
 #include "hardware/clocks.h" 
 
@@ -43,20 +44,28 @@ typedef struct {
     int tamanho_seq;
     int indice_jogador;
     bool jogo_iniciado;
+    bool aguardando_resposta;
+    alarm_id_t timeout_resposta_id;
     int anim_frame;
     uint32_t next_anim_update_ms;
 } GameState;
 
 volatile int botao_clicado = -1;
+volatile bool timeout_resposta_expirado = false;
 
 void drawImagem(int estado);
 void draw_level_text(const GameState *state);
 void show_game_over_screen(const GameState *state);
 void update_game_animation_if_needed(GameState *state);
 void sleep_with_animation(GameState *state, int total_ms);
+void apaga_leds();
 void acende_feedback(GameState *state, int idx, int tempo_ms);
 void mostra_sequencia(GameState *state);
 void iniciar_jogo(GameState *state);
+void iniciar_timeout_resposta(GameState *state);
+void cancelar_timeout_resposta(GameState *state);
+void finalizar_jogo(GameState *state);
+int64_t timeout_resposta_callback(alarm_id_t id, void *user_data);
 
 const int text_height = 16;
 const int msgPosY = rotImgPosY - 60;
@@ -94,6 +103,44 @@ void show_game_over_screen(const GameState *state) {
 
     sleep_ms(1800);
     draw_start_screen();
+}
+
+int64_t timeout_resposta_callback(alarm_id_t id, void *user_data) {
+    (void)id;
+    (void)user_data;
+
+    timeout_resposta_expirado = true;
+    return 0;
+}
+
+void cancelar_timeout_resposta(GameState *state) {
+    if (state->aguardando_resposta) {
+        cancel_alarm(state->timeout_resposta_id);
+        state->aguardando_resposta = false;
+    }
+    timeout_resposta_expirado = false;
+}
+
+void iniciar_timeout_resposta(GameState *state) {
+    cancelar_timeout_resposta(state);
+    state->timeout_resposta_id = add_alarm_in_ms(5000, timeout_resposta_callback, state, false);
+    state->aguardando_resposta = true;
+}
+
+void finalizar_jogo(GameState *state) {
+    state->jogo_iniciado = false;
+    cancelar_timeout_resposta(state);
+
+    tocar_som(GAME_OVER_WAV_DATA, GAME_OVER_WAV_LENGTH);
+
+    for(int i=0; i<3; i++) {
+        for(int l=0; l<4; l++) gpio_put(LEDS[l], 1);
+        sleep_ms(150);
+        apaga_leds();
+        sleep_ms(150);
+    }
+
+    show_game_over_screen(state);
 }
 
 void drawImagem(int estado) {
@@ -172,7 +219,7 @@ void btn_callback(uint gpio, uint32_t event_mask) {
 }
 
 void iniciar_jogo(GameState *state) {
-    printf("Iniciando...\n");
+    
     
     tocar_som(START_WAV_DATA, START_WAV_LENGTH);
 
@@ -180,6 +227,7 @@ void iniciar_jogo(GameState *state) {
     state->tamanho_seq = 0;
     state->indice_jogador = 0;
     state->jogo_iniciado = true;
+    state->aguardando_resposta = false;
 
     gfx_clear();
 
@@ -193,6 +241,7 @@ void iniciar_jogo(GameState *state) {
     sleep_with_animation(state, 1500); 
 
     mostra_sequencia(state);
+    iniciar_timeout_resposta(state);
 }
 
 int main() {
@@ -200,6 +249,8 @@ int main() {
         .tamanho_seq = 0,
         .indice_jogador = 0,
         .jogo_iniciado = false,
+        .aguardando_resposta = false,
+        .timeout_resposta_id = 0,
         .anim_frame = 1,
         .next_anim_update_ms = 0,
     };
@@ -234,6 +285,12 @@ int main() {
     while (true) {
         update_game_animation_if_needed(&state);
 
+        if (timeout_resposta_expirado) {
+            timeout_resposta_expirado = false;
+            botao_clicado = -1;
+            finalizar_jogo(&state);
+        }
+
         if (botao_clicado != -1) {
             int cor = botao_clicado;
             
@@ -244,6 +301,7 @@ int main() {
                 botao_clicado = -1; 
             } 
             else {
+                cancelar_timeout_resposta(&state);
                 acende_feedback(&state, cor, 400);
 
                 if (cor == state.sequencia[state.indice_jogador]) {
@@ -260,21 +318,14 @@ int main() {
                             
                             sleep_with_animation(&state, 200);
                             mostra_sequencia(&state);
+                            iniciar_timeout_resposta(&state);
                         }
+                    } else {
+                        iniciar_timeout_resposta(&state);
                     }
                 } else {
-                    printf("Erro!\n");
-                    state.jogo_iniciado = false;
-                    
-                    tocar_som(GAME_OVER_WAV_DATA, GAME_OVER_WAV_LENGTH);
-
-                    for(int i=0; i<3; i++) {
-                        for(int l=0; l<4; l++) gpio_put(LEDS[l], 1);
-                        sleep_ms(150);
-                        apaga_leds();
-                        sleep_ms(150);
-                    }
-                    show_game_over_screen(&state);
+                  
+                    finalizar_jogo(&state);
                     
                     botao_clicado = -1;
                 }
